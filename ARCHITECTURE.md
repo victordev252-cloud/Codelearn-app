@@ -1,0 +1,7 @@
+# CodeMaster Academy Architecture
+
+CodeMaster Academy keeps the **canonical teaching curriculum** in `shared/curriculum.ts`. This is intentional: course lessons, code examples, quiz prompts, project briefs, and track metadata are versioned product content that should be reviewed alongside the application code and can later be migrated into an editorial CMS without changing learner-facing contracts.
+
+Mutable learner data is database-backed. The current schema stores authenticated users, lesson completion and quiz scores, project submissions, and issued certificates in `drizzle/schema.ts`. Server procedures in `server/routers.ts` enforce the important rules: learner data is accessed through protected procedures, tutor requests run server-side so credentials remain private, and certificates can only be issued when every canonical lesson in the selected track has a completed progress record.
+
+The frontend reads canonical content from the shared module and reads mutable state through typed tRPC procedures. This separation keeps the lesson experience fast and deterministic while ensuring progress, scores, submissions, and credentials survive a new browser session. When the curriculum grows, add reviewed entries to `shared/curriculum.ts` first; when learner behavior or editorial management becomes the priority, introduce normalized content tables and migrate the shared content behind the same UI contracts.
