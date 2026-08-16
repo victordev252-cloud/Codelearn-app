@@ -1,17 +1,21 @@
 # MailForge
 
-MailForge is a responsive email studio for creating, previewing, managing, and sending HTML campaigns. The workspace includes a dashboard, campaign composer, subscriber list, delivery history, analytics, SMTP settings, and responsible-sending safeguards such as suppression of unsubscribed contacts and unsubscribe-link support.
+MailForge is a full-stack HTML email management system. It provides a responsive private workspace for creating campaigns, managing consented subscribers, configuring SMTP delivery, sending test and production emails, reviewing delivery history, and monitoring campaign performance.
 
-## Features
+## What is implemented
 
-The application provides an Overview dashboard with delivery volume, audience health, open-rate metrics, and recent campaigns. The Compose workspace supports subject lines, recipient groups, raw HTML editing, live preview, draft state, and send actions. Subscribers can be searched, added, imported through the UI affordance, grouped, and toggled between active and unsubscribed status. Campaigns, delivery history, and analytics have dedicated responsive views.
+The dashboard includes Overview, Compose Email, Campaigns, Subscribers, Email History, Analytics, and Settings views. The Compose workspace supports campaign metadata, recipient groups, raw HTML editing, preview, unsubscribe-token placeholders, and send actions. Subscriber records are persisted with status, group, consent timestamp, and a cryptographically random unsubscribe token. Unsubscribed records are suppressed from campaign sends.
 
-The server includes protected SMTP procedures for connection verification and test delivery. SMTP credentials are accepted only on the server, are not written to logs, and are never returned to the browser. Configure a real delivery provider before using production sends.
+The server provides protected procedures for listing and creating subscribers, toggling suppression status, saving and listing campaigns, reading delivery logs, verifying SMTP credentials, saving encrypted SMTP settings, sending test messages, and sending campaigns sequentially through the configured SMTP provider. Campaign sending records success or failure per recipient. The direct `/unsubscribe/:token` endpoint updates suppression status and returns a confirmation page.
+
+SMTP passwords are encrypted with AES-256-GCM before persistence. The encryption key is derived from `JWT_SECRET`; use a long, stable secret in production and rotate credentials deliberately. Credentials are never returned by the settings query and are not included in delivery logs.
 
 ## Development
 
 ```bash
 pnpm install
+cp .env.example .env
+pnpm db:push
 pnpm dev
 ```
 
@@ -23,9 +27,17 @@ pnpm test
 pnpm build
 ```
 
-## SMTP configuration
+## Required environment variables
 
-Create a local `.env` file from the values below and replace the placeholders with credentials from your SMTP provider. Do not commit `.env` or real credentials.
+```env
+NODE_ENV=development
+PORT=3000
+APP_URL=http://localhost:3000
+JWT_SECRET=replace-with-a-long-random-secret
+DATABASE_URL=mysql://user:password@localhost:3306/mailforge
+```
+
+For a server-level SMTP fallback, configure the following values. Workspace-level SMTP settings can also be saved through the protected settings procedure and will take precedence.
 
 ```env
 SMTP_HOST=smtp.example.com
@@ -35,14 +47,16 @@ SMTP_PASSWORD=use-an-app-password-or-provider-secret
 SMTP_FROM=sender@example.com
 ```
 
-Port `587` normally uses STARTTLS, while port `465` uses implicit TLS. Gmail, Outlook, Amazon SES, Mailgun, SendGrid, and custom SMTP servers can be used when their provider credentials and sender verification requirements are satisfied.
+Port `587` normally uses STARTTLS and port `465` uses implicit TLS. Gmail, Outlook, Amazon SES, Mailgun, SendGrid, and custom SMTP servers are supported when the provider permits authenticated SMTP and the sender identity has been verified.
 
-The protected server procedures are available as `email.verify` and `email.sendTest` through the application router. A production deployment should persist campaigns and subscriber records in the project database, configure a background delivery queue for large sends, and keep provider rate limits in the sending service.
+## Database migration
+
+The new MailForge tables are included in `drizzle/0002_magenta_avengers.sql`. Run `pnpm db:push` with a valid `DATABASE_URL` to generate and apply the latest migration. The schema includes `subscribers`, `campaigns`, `email_logs`, and `smtp_settings` in addition to the existing application tables.
 
 ## Responsible sending
 
-MailForge is intended for permission-based communication. Only send to contacts who have consented, suppress unsubscribed recipients, keep the sender identity clear, and include a working unsubscribe path for marketing messages. The interface deliberately does not implement spam bypasses, stealth delivery, or anonymous bulk mailing.
+MailForge is designed for permission-based communication. Only send to contacts who have consented, suppress unsubscribed recipients, keep sender identity clear, include an unsubscribe link in marketing HTML, respect provider rate limits, and review bounces and failures. The application intentionally does not implement spam bypasses, stealth sending, anonymous bulk mail, or provider-limit evasion.
 
 ## Project structure
 
-The main workspace UI is in `client/src/pages/Home.tsx`, global styling is in `client/src/index.css`, SMTP delivery is in `server/email.ts`, and the protected procedures are in `server/routers.ts`. The existing application authentication and server infrastructure remain available for production integration.
+The main workspace UI is in `client/src/pages/Home.tsx`, styling is in `client/src/index.css`, the database schema is in `drizzle/schema.ts`, persistence helpers are in `server/db.ts`, SMTP encryption and delivery are in `server/email.ts`, API procedures are in `server/routers.ts`, and the public unsubscribe handler is in `server/_core/index.ts`.

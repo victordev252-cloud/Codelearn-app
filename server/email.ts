@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import nodemailer from "nodemailer";
+import { ENV } from "./_core/env";
 
 export type SmtpConfig = {
   host: string;
@@ -7,6 +9,28 @@ export type SmtpConfig = {
   password: string;
   secure?: boolean;
 };
+
+function encryptionKey() {
+  return crypto.createHash("sha256").update(ENV.cookieSecret || "mailforge-development-secret").digest();
+}
+
+export function encryptSecret(value: string) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, ciphertext]).toString("base64url");
+}
+
+export function decryptSecret(value: string) {
+  const payload = Buffer.from(value, "base64url");
+  const iv = payload.subarray(0, 12);
+  const tag = payload.subarray(12, 28);
+  const ciphertext = payload.subarray(28);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
 
 function transporter(config: SmtpConfig) {
   return nodemailer.createTransport({

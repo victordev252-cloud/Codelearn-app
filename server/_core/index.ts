@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { unsubscribeByToken } from "../db";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -36,6 +37,10 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.get("/unsubscribe/:token", async (req, res) => {
+    const success = await unsubscribeByToken(req.params.token);
+    res.status(success ? 200 : 404).send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MailForge unsubscribe</title><style>body{font-family:system-ui,sans-serif;background:#f7f9f6;color:#172033;display:grid;place-items:center;min-height:100vh;margin:0}.card{max-width:480px;margin:20px;padding:36px;border:1px solid #dfe7df;border-radius:20px;background:white;text-align:center}h1{font-size:28px;margin:0 0 12px}p{color:#718072;line-height:1.6}</style></head><body><main class="card"><h1>${success ? "You are unsubscribed" : "Link not found"}</h1><p>${success ? "You will no longer receive marketing emails from this list." : "This unsubscribe link is invalid or has already expired."}</p></main></body></html>`);
+  });
   // tRPC API
   app.use(
     "/api/trpc",

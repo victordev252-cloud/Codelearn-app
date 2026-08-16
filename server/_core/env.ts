@@ -12,4 +12,5 @@ export const ENV = {
   smtpUsername: process.env.SMTP_USERNAME ?? "",
   smtpPassword: process.env.SMTP_PASSWORD ?? "",
   smtpFrom: process.env.SMTP_FROM ?? "",
+  appUrl: process.env.APP_URL ?? "http://localhost:3000",
 };

@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { certificates, InsertUser, lessonProgress, projectSubmissions, users } from "../drizzle/schema";
+import { campaigns, certificates, emailLogs, InsertUser, lessonProgress, projectSubmissions, smtpSettings, subscribers, users } from "../drizzle/schema";
+import crypto from "node:crypto";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -64,6 +65,91 @@ export async function getProjectSubmissions(userId: number) {
 export async function getCertificate(userId: number, trackId: string) {
   const db = await getDb(); if (!db) return undefined;
   const result = await db.select().from(certificates).where(and(eq(certificates.userId, userId), eq(certificates.trackId, trackId))).limit(1);
+  return result[0];
+}
+
+export async function listSubscribers(ownerId: number) {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(subscribers).where(eq(subscribers.ownerId, ownerId)).orderBy(desc(subscribers.createdAt));
+}
+
+export async function addSubscriber(ownerId: number, input: { name: string; email: string; group?: string }) {
+  const db = await getDb(); if (!db) return { localOnly: true, unsubscribeToken: crypto.randomUUID() };
+  const email = input.email.trim().toLowerCase();
+  const existing = await db.select().from(subscribers).where(eq(subscribers.email, email)).limit(1);
+  if (existing[0]) throw new Error("A subscriber with this email already exists.");
+  const unsubscribeToken = crypto.randomBytes(32).toString("hex");
+  await db.insert(subscribers).values({ ownerId, name: input.name.trim(), email, group: input.group ?? "Newsletter", unsubscribeToken });
+  return { created: true as const, unsubscribeToken };
+}
+
+export async function toggleSubscriber(ownerId: number, id: number) {
+  const db = await getDb(); if (!db) return { localOnly: true };
+  const existing = await db.select().from(subscribers).where(and(eq(subscribers.id, id), eq(subscribers.ownerId, ownerId))).limit(1);
+  if (!existing[0]) throw new Error("Subscriber not found.");
+  const status = existing[0].status === "active" ? "unsubscribed" : "active";
+  await db.update(subscribers).set({ status }).where(and(eq(subscribers.id, id), eq(subscribers.ownerId, ownerId)));
+  return { status };
+}
+
+export async function unsubscribeByToken(token: string) {
+  const db = await getDb(); if (!db) return false;
+  const existing = await db.select().from(subscribers).where(eq(subscribers.unsubscribeToken, token)).limit(1);
+  if (!existing[0]) return false;
+  await db.update(subscribers).set({ status: "unsubscribed" }).where(eq(subscribers.id, existing[0].id));
+  return true;
+}
+
+export async function listCampaigns(ownerId: number) {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(campaigns).where(eq(campaigns.ownerId, ownerId)).orderBy(desc(campaigns.updatedAt));
+}
+
+export async function saveCampaign(ownerId: number, input: { id?: number; name: string; subject: string; html: string; status?: "draft" | "scheduled" }) {
+  const db = await getDb(); if (!db) return { localOnly: true };
+  const values = { ownerId, name: input.name.trim(), subject: input.subject.trim(), html: input.html, status: input.status ?? "draft" as const };
+  if (input.id) {
+    await db.update(campaigns).set(values).where(and(eq(campaigns.id, input.id), eq(campaigns.ownerId, ownerId)));
+    return { updated: true as const, id: input.id };
+  }
+  const result = await db.insert(campaigns).values(values);
+  return { created: true as const, id: Number(result[0].insertId) };
+}
+
+export async function getCampaign(ownerId: number, id: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.ownerId, ownerId))).limit(1);
+  return result[0];
+}
+
+export async function listEmailLogs(ownerId: number) {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(emailLogs).where(eq(emailLogs.ownerId, ownerId)).orderBy(desc(emailLogs.createdAt)).limit(500);
+}
+
+export async function saveSmtpSettings(ownerId: number, input: { host: string; port: number; username: string; encryptedPassword: string; fromEmail: string; fromName: string }) {
+  const db = await getDb(); if (!db) return { localOnly: true };
+  const existing = await db.select().from(smtpSettings).where(eq(smtpSettings.ownerId, ownerId)).limit(1);
+  if (existing[0]) await db.update(smtpSettings).set(input).where(eq(smtpSettings.ownerId, ownerId));
+  else await db.insert(smtpSettings).values({ ownerId, ...input });
+  return { saved: true as const };
+}
+
+export async function recordEmailLog(input: { campaignId?: number; ownerId: number; recipient: string; status: "sent" | "failed"; providerMessageId?: string; errorMessage?: string }) {
+  const db = await getDb(); if (!db) return { localOnly: true };
+  await db.insert(emailLogs).values({ ...input, sentAt: input.status === "sent" ? new Date() : null });
+  return { saved: true as const };
+}
+
+export async function markCampaign(ownerId: number, id: number, status: "sending" | "sent" | "failed") {
+  const db = await getDb(); if (!db) return { localOnly: true };
+  await db.update(campaigns).set({ status, sentAt: status === "sent" ? new Date() : null }).where(and(eq(campaigns.id, id), eq(campaigns.ownerId, ownerId)));
+  return { updated: true as const };
+}
+
+export async function getSmtpSettings(ownerId: number) {
+  const db = await getDb(); if (!db) return undefined;
+  const result = await db.select().from(smtpSettings).where(eq(smtpSettings.ownerId, ownerId)).limit(1);
   return result[0];
 }
 
