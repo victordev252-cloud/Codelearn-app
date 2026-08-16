@@ -49,6 +49,12 @@ code, pre, .mono { font-family: 'DM Mono', monospace; }
 .card-lift:hover { transform: translateY(-4px); box-shadow: 0 18px 45px rgba(24, 35, 52, .09); border-color: #b9cdbf; }
 .btn-press { transition: transform 160ms ease, background-color 160ms ease, color 160ms ease; }
 .btn-press:active { transform: scale(.97); }
+.field { width: 100%; border: 1px solid #dfe7df; border-radius: .7rem; background: #fbfcfb; padding: .72rem .85rem; color: #253044; font-size: .78rem; font-weight: 700; outline: none; transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.field:focus { border-color: #9fbea1; background: white; box-shadow: 0 0 0 3px rgba(159, 190, 161, .18); }
+.field::placeholder { color: #a1aaa3; font-weight: 600; }
+.eyebrow { color: #718072; font-size: .68rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+@media (max-width: 640px) { .container { width: min(100% - 1.5rem, 1180px); } }
+
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }

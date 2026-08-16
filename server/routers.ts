@@ -6,6 +6,8 @@ import { invokeLLM } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getCertificate, getProgress, getProjectSubmissions, issueCertificate, saveLessonProgress, saveProjectSubmission } from "./db";
+import { ENV } from "./_core/env";
+import { sendHtmlEmail, verifySmtp } from "./email";
 
 const tutorInput = z.object({ lessonTitle: z.string(), lessonDescription: z.string(), lessonCode: z.string().optional(), question: z.string().min(2) });
 
@@ -38,6 +40,17 @@ export const appRouter = router({
       if (!trackLessons.length || completed.length < trackLessons.length) return { eligible: false, certificateCode: null };
       const certificateCode = `CMA-${input.trackId.toUpperCase()}-${ctx.user.id}-${Date.now().toString(36).toUpperCase()}`;
       return issueCertificate(ctx.user.id, input.trackId, certificateCode);
+    }),
+  }),
+  email: router({
+    verify: protectedProcedure.input(z.object({ host: z.string().min(1), port: z.number().int().min(1).max(65535), username: z.string().email(), password: z.string().min(1), secure: z.boolean().optional() })).mutation(async ({ input }) => {
+      await verifySmtp(input);
+      return { verified: true as const };
+    }),
+    sendTest: protectedProcedure.input(z.object({ to: z.string().email(), subject: z.string().min(1).max(200), html: z.string().min(1), smtp: z.object({ host: z.string().min(1), port: z.number().int().min(1).max(65535), username: z.string().email(), password: z.string().min(1), secure: z.boolean().optional() }).optional() })).mutation(async ({ input }) => {
+      const smtp = input.smtp ?? { host: ENV.smtpHost, port: ENV.smtpPort, username: ENV.smtpUsername, password: ENV.smtpPassword, secure: ENV.smtpPort === 465 };
+      if (!smtp.host || !smtp.username || !smtp.password || !ENV.smtpFrom) throw new Error("SMTP settings are incomplete. Configure SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM.");
+      return sendHtmlEmail({ smtp, from: ENV.smtpFrom, to: input.to, subject: input.subject, html: input.html });
     }),
   }),
   tutor: router({
